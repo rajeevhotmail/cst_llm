@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Code QA System</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #333;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            cursor: pointer;
+        }
+        #response {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-left: 5px solid #4CAF50;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1>Code Q&A System</h1>
+
+    <div>
+        <p>Ask a question about the project:</p>
+        <input type="text" id="question" placeholder="e.g., What are the main functions in this project?">
+        <button onclick="askQuestion()">Ask</button>
+    </div>
+
+    <div id="loading" style="display:none;">
+        <p>Processing your question...</p>
+    </div>
+
+    <div id="response"></div>
+
+    <script>
+        function askQuestion() {
+            const question = document.getElementById('question').value;
+            if (!question) {
+                alert('Please enter a question');
+                return;
+            }
+
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('response').innerHTML = '';
+
+            fetch('/query', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ question: question })
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('response').innerHTML = data.answer;
+            })
+            .catch(error => {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('response').innerHTML = 'Error: ' + error;
+            });
+        }
+    </script>
+</body>
+</html>

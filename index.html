@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Code QA with Embedding Comparison</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1, h2, h3 {
+            color: #2c3e50;
+            margin-top: 20px;
+        }
+        form {
+            margin-bottom: 20px;
+        }
+        input[type="text"] {
+            width: 70%;
+            padding: 8px;
+            margin-right: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            padding: 8px 15px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .checkbox-container {
+            margin-top: 10px;
+        }
+        .response-container {
+            white-space: pre-wrap;
+            border: 1px solid #ddd;
+            padding: 15px;
+            background-color: #f9f9f9;
+            min-height: 100px;
+            border-radius: 4px;
+            overflow-x: auto;
+            margin-bottom: 20px;
+        }
+        .loading {
+            color: #888;
+            font-style: italic;
+        }
+        /* Tabs styling */
+        .tab {
+            overflow: hidden;
+            border: 1px solid #ccc;
+            background-color: #f1f1f1;
+            border-radius: 4px 4px 0 0;
+        }
+        .tab button {
+            background-color: inherit;
+            float: left;
+            border: none;
+            outline: none;
+            cursor: pointer;
+            padding: 14px 16px;
+            transition: 0.3s;
+            color: #333;
+        }
+        .tab button:hover {
+            background-color: #ddd;
+        }
+        .tab button.active {
+            background-color: #3498db;
+            color: white;
+        }
+        .tabcontent {
+            display: none;
+            padding: 6px 12px;
+            border: 1px solid #ccc;
+            border-top: none;
+            border-radius: 0 0 4px 4px;
+            animation: fadeEffect 1s;
+        }
+        @keyframes fadeEffect {
+            from {opacity: 0;}
+            to {opacity: 1;}
+        }
+        .visible {
+            display: block;
+        }
+        select {
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            margin-right: 10px;
+        }
+        code {
+            background-color: #f1f1f1;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>Code QA with Embedding Comparison</h1>
+
+    <div class="query-section">
+        <h2>Ask a question about the project:</h2>
+        <form id="questionForm">
+            <input type="text" name="question" id="question" placeholder="Enter your question..." required>
+            <select id="query-type">
+                <option value="standard">Standard Query</option>
+                <option value="compare">Compare Embeddings</option>
+            </select>
+            <button type="submit">Ask</button>
+
+            <div class="checkbox-container">
+                <input type="checkbox" id="debug-mode" checked>
+                <label for="debug-mode">Debug Mode (Preview context before API call)</label>
+            </div>
+        </form>
+    </div>
+
+    <!-- Standard response section -->
+    <div id="standard-response-section">
+        <h3>Response:</h3>
+        <div id="response" class="response-container"></div>
+    </div>
+
+    <!-- Comparison response section -->
+    <div id="comparison-response-section" style="display:none;">
+        <h3>Comparison of Embedding Approaches:</h3>
+
+        <div class="tab">
+            <button class="tablink active" onclick="openTab(event, 'combined-tab')">Combined Results</button>
+            <button class="tablink" onclick="openTab(event, 'cst-tab')">CST Embedding</button>
+            <button class="tablink" onclick="openTab(event, 'text-tab')">Text Embedding</button>
+        </div>
+
+        <div id="combined-tab" class="tabcontent visible">
+            <h4>Combined Approach (Text + CST)</h4>
+            <div id="combined-response" class="response-container"></div>
+        </div>
+
+        <div id="cst-tab" class="tabcontent">
+            <h4>CST-Based Embedding</h4>
+            <div id="cst-response" class="response-container"></div>
+        </div>
+
+        <div id="text-tab" class="tabcontent">
+            <h4>Text-Based Embedding</h4>
+            <div id="text-response" class="response-container"></div>
+        </div>
+    </div>
+
+    <script>
+        // Tab functionality
+        function openTab(evt, tabName) {
+            var i, tabcontent, tablinks;
+
+            tabcontent = document.getElementsByClassName("tabcontent");
+            for (i = 0; i < tabcontent.length; i++) {
+                tabcontent[i].classList.remove("visible");
+            }
+
+            tablinks = document.getElementsByClassName("tablink");
+            for (i = 0; i < tablinks.length; i++) {
+                tablinks[i].className = tablinks[i].className.replace(" active", "");
+            }
+
+            document.getElementById(tabName).classList.add("visible");
+            evt.currentTarget.className += " active";
+        }
+
+        // Switch query type
+        document.getElementById("query-type").addEventListener("change", function() {
+            if (this.value === "standard") {
+                document.getElementById("standard-response-section").style.display = "block";
+                document.getElementById("comparison-response-section").style.display = "none";
+            } else {
+                document.getElementById("standard-response-section").style.display = "none";
+                document.getElementById("comparison-response-section").style.display = "block";
+            }
+        });
+
+        // Handle form submission
+        document.getElementById("questionForm").addEventListener("submit", async function(event) {
+            event.preventDefault();
+
+            let question = document.getElementById("question").value;
+            let debugMode = document.getElementById("debug-mode").checked;
+            let queryType = document.getElementById("query-type").value;
+
+            // Set loading indicators
+            if (queryType === "standard") {
+                document.getElementById("response").innerHTML = "<p class='loading'>Processing your question...</p>";
+            } else {
+                document.getElementById("combined-response").innerHTML = "<p class='loading'>Processing combined approach...</p>";
+                document.getElementById("cst-response").innerHTML = "<p class='loading'>Processing CST approach...</p>";
+                document.getElementById("text-response").innerHTML = "<p class='loading'>Processing text approach...</p>";
+            }
+
+            try {
+                let endpoint = queryType === "standard" ? "/query" : "/compare";
+                let response = await fetch(endpoint, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        question: question,
+                        debug_mode: debugMode
+                    })
+                });
+
+                let result = await response.json();
+
+                if (result.error) {
+                    if (queryType === "standard") {
+                        document.getElementById("response").innerHTML = `<p style="color: red;">Error: ${result.error}</p>`;
+                    } else {
+                        document.getElementById("combined-response").innerHTML = `<p style="color: red;">Error: ${result.error}</p>`;
+                        document.getElementById("cst-response").innerHTML = `<p style="color: red;">Error: ${result.error}</p>`;
+                        document.getElementById("text-response").innerHTML = `<p style="color: red;">Error: ${result.error}</p>`;
+                    }
+                } else {
+                    if (queryType === "standard") {
+                        formatAndDisplayResponse("response", result.answer);
+                    } else {
+                        formatAndDisplayResponse("combined-response", result.comparison.combined);
+                        formatAndDisplayResponse("cst-response", result.comparison.cst);
+                        formatAndDisplayResponse("text-response", result.comparison.text);
+                    }
+                }
+            } catch (error) {
+                let errorMsg = `<p style="color: red;">Error connecting to server: ${error.message}</p>`;
+                if (queryType === "standard") {
+                    document.getElementById("response").innerHTML = errorMsg;
+                } else {
+                    document.getElementById("combined-response").innerHTML = errorMsg;
+                    document.getElementById("cst-response").innerHTML = errorMsg;
+                    document.getElementById("text-response").innerHTML = errorMsg;
+                }
+            }
+        });
+
+        // Format and display response with markdown-like formatting
+        function formatAndDisplayResponse(elementId, text) {
+            let formattedText = text
+                .replace(/## (.*)/g, '<h3>$1</h3>')  // ## headings
+                .replace(/### (.*)/g, '<h4>$1</h4>')  // ### headings
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')  // Bold text
+                .replace(/```(.*?)```/gs, function(match, p1) {  // Code blocks
+                    return '<pre><code>' + p1 + '</code></pre>';
+                })
+                .replace(/\n/g, '<br>');  // Line breaks
+
+            document.getElementById(elementId).innerHTML = formattedText;
+        }
+    </script>
+</body>
+</html>
