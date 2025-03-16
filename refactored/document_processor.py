@@ -1,26 +1,44 @@
 import os
 from langchain_community.document_loaders import DirectoryLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+
 import cohere
 import logging
-
-def load_documents(directory_path):
-    """Load all text documents from the specified directory."""
-    loader = DirectoryLoader(directory_path, glob="**/*.txt")
-    documents = loader.load()
-    logging.info(f"Loaded {len(documents)} documents from {directory_path}")
-    return documents
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 def process_documents(documents):
-    """Split documents into chunks and create embeddings."""
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=200,
-        length_function=len
+    """Split documents using Python-aware chunking"""
+    # Filter out empty or minimal content
+    valid_docs = [doc for doc in documents if len(doc.page_content.strip()) > 50]
+
+    text_splitter = RecursiveCharacterTextSplitter.from_language(
+        language="python",
+        chunk_size=1500,
+        chunk_overlap=200
     )
-    chunks = text_splitter.split_documents(documents)
-    logging.info(f"Split documents into {len(chunks)} chunks")
+    chunks = text_splitter.split_documents(valid_docs)
+    logging.info(f"Split documents into {len(chunks)} Python-aware chunks")
     return chunks
+
+
+
+
+def load_documents(directory_path):
+    """Load documents in priority order"""
+    loaders = [
+        DirectoryLoader(directory_path, glob="**/*.py"),      # Python files first
+        DirectoryLoader(directory_path, glob="**/README.*"),  # READMEs next
+        DirectoryLoader(directory_path, glob="**/*.md"),      # Other docs
+        DirectoryLoader(directory_path, glob="**/*.rst")      # ReStructuredText
+    ]
+
+    all_docs = []
+    for loader in loaders:
+        all_docs.extend(loader.load())
+
+    logging.info(f"Loaded {len(all_docs)} documents by type")
+    return all_docs
+
+
 
 def rerank_results(retrieved_docs, query):
     """Return top 3 most relevant documents"""

@@ -42,3 +42,20 @@ def format_sources(docs):
         if hasattr(doc, 'metadata') and 'source' in doc.metadata:
             sources.append(doc.metadata['source'])
     return "\nSources:\n" + "\n".join(sources) if sources else ""
+
+def get_mock_response(query, relevant_docs):
+    """Display context with cleaner formatting"""
+    context = "\n=== RELEVANT CONTEXT ===\n"
+    for i, doc in enumerate(relevant_docs, 1):
+        # Get just the filename from the full path
+        filename = doc.metadata.get('source', '').split('/')[-1]
+
+        # Clean up the content by removing extra newlines
+        content = doc.page_content.strip().replace('\n\n\n', '\n')
+
+        context += f"\n[{i}] File: {filename}\n"
+        context += f"{'=' * 50}\n"
+        context += f"{content}\n"
+
+    context += "\n=== END CONTEXT ===\n"
+    return context

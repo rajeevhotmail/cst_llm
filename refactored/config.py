@@ -10,7 +10,7 @@ def get_api_key():
     return api_key
 
 def setup_logging():
-    """Configure logging with timestamp-based file output."""
+    """Configure logging with timestamp-based file output and warning filters."""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_filename = f"chat_log_{timestamp}.log"
 
@@ -22,4 +22,10 @@ def setup_logging():
             logging.StreamHandler()
         ]
     )
+
+    # Suppress specific warnings
+    logging.getLogger("sentence_transformers.SentenceTransformer").setLevel(logging.ERROR)
+    logging.getLogger("feature_extraction").setLevel(logging.ERROR)
+    logging.getLogger("transformers").setLevel(logging.ERROR)
+
     return logging.getLogger(__name__)
