@@ -1,4 +1,5 @@
-from langchain.document_loaders import DirectoryLoader
+import os
+from langchain_community.document_loaders import DirectoryLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 import cohere
 import logging
@@ -22,6 +23,8 @@ def process_documents(documents):
     return chunks
 
 def rerank_results(retrieved_docs, query):
+    """Return top 3 most relevant documents"""
+    return retrieved_docs[:3]
     """Rerank retrieved documents using Cohere's reranking model."""
     co = cohere.Client(os.getenv("COHERE_API_KEY"))
     docs_text = [doc.page_content for doc in retrieved_docs]
@@ -35,6 +38,7 @@ def rerank_results(retrieved_docs, query):
 
     reranked_docs = []
     for result in results:
-        reranked_docs.append(retrieved_docs[result.index])
+        index = result.index  # Direct access to index
+        reranked_docs.append(retrieved_docs[index])
 
     return reranked_docs

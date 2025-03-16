@@ -1,7 +1,8 @@
 import json
 from datetime import datetime
-from langchain.chat_models import ChatOpenAI
+from langchain_community.chat_models import ChatOpenAI
 from langchain.schema import HumanMessage, AIMessage, SystemMessage
+
 
 def get_chat_response(query, relevant_docs, chat_history=None):
     """Get response from ChatGPT using query and relevant documents."""
