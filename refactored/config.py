@@ -27,5 +27,6 @@ def setup_logging():
     logging.getLogger("sentence_transformers.SentenceTransformer").setLevel(logging.ERROR)
     logging.getLogger("feature_extraction").setLevel(logging.ERROR)
     logging.getLogger("transformers").setLevel(logging.ERROR)
+    logging.getLogger("text_processing").setLevel(logging.ERROR)
 
     return logging.getLogger(__name__)

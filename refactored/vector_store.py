@@ -3,17 +3,56 @@ from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import OpenAIEmbeddings
 import logging
 import time
-from langchain_community.embeddings import HuggingFaceEmbeddings
-
-
-
+from langchain_huggingface import HuggingFaceEmbeddings
+import json
 
 MODELS_CACHE_DIR = "models_cache"
 
-
-
 FAISS_INDEX_PATH = "faiss_hf_index"
 FAISS_TIMESTAMP_FILE = "faiss_timestamp.txt"
+CHUNK_STATS_PATH = "faiss_hf_index/chunk_stats.json"
+
+def save_chunk_stats(chunks):
+    # Filter for unique, non-test files
+    unique_files = set()
+    selected_chunks = []
+
+    for chunk in chunks:
+        file_path = chunk.metadata['source']
+        if (not 'test' in file_path.lower() and
+            file_path not in unique_files and
+            file_path.endswith('.py')):
+            unique_files.add(file_path)
+            selected_chunks.append(chunk)
+            if len(selected_chunks) >= 5:
+                break
+
+    stats = {
+        "total_chunks": len(chunks),
+        "file_types": {
+            "python": sum(1 for c in chunks if c.metadata['source'].endswith('.py')),
+            "docs": sum(1 for c in chunks if c.metadata['source'].endswith('.md'))
+        },
+        "sample_chunks": [
+            {
+                "source": chunk.metadata['source'],
+                "size": len(chunk.page_content),
+                "type": "Python" if chunk.metadata['source'].endswith('.py') else "Documentation"
+            }
+            for chunk in selected_chunks
+        ]
+    }
+
+    with open(CHUNK_STATS_PATH, 'w') as f:
+        json.dump(stats, f)
+
+
+
+def load_chunk_stats():
+    """Load chunk statistics from JSON file"""
+    with open(CHUNK_STATS_PATH, 'r') as f:
+        return json.load(f)
+
 
 def is_index_fresh(source_dir):
     """Check if FAISS index is up to date with source files"""
@@ -78,31 +117,28 @@ def create_vector_store(chunks, source_dir):
     logging.info("Starting embeddings initialization...")
 
     os.makedirs(MODELS_CACHE_DIR, exist_ok=True)
-
     embeddings = HuggingFaceEmbeddings(
         model_name="sentence-transformers/all-MiniLM-L6-v2",
         cache_folder=MODELS_CACHE_DIR
     )
-
-    logging.info(f"Embeddings model initialized in {time.time() - start_time:.2f} seconds")
-
-    model_load_time = time.time()
-    logging.info("Starting vector store operations...")
 
     if os.path.exists(FAISS_INDEX_PATH):
         logging.info(f"Found existing FAISS index at {FAISS_INDEX_PATH}")
         vector_store = FAISS.load_local(
             FAISS_INDEX_PATH,
             embeddings,
-            allow_dangerous_deserialization=True
+            allow_dangerous_deserialization=True  # Added this flag
         )
-        logging.info(f"Loaded existing index in {time.time() - model_load_time:.2f} seconds")
+        logging.info(f"Loaded existing index in {time.time() - start_time:.2f} seconds")
     else:
         logging.info("Creating new FAISS index")
         vector_store = FAISS.from_documents(chunks, embeddings)
         vector_store.save_local(FAISS_INDEX_PATH)
-        logging.info(f"Created and saved new index in {time.time() - model_load_time:.2f} seconds")
+        save_chunk_stats(chunks)
+        logging.info(f"Created and saved new index in {time.time() - start_time:.2f} seconds")
 
     return vector_store
+
+
 
 

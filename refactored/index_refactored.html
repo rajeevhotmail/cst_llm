@@ -36,29 +36,143 @@
         </div>
         <div id="results" class="mt-4"></div>
     </div>
+    <div class="container mt-5">
+    <h2>Code Chunking Analysis</h2>
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Chunking Metrics</h5>
+                    <div id="chunkStats"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Sample Chunks</h5>
+                    <div id="sampleChunks"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+        <div class="container mt-5">
+    <h2>Retrieval Analysis</h2>
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Recent Searches</h5>
+                    <div id="recentSearches"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Performance Metrics</h5>
+                    <div id="searchMetrics"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
+</div>
     <script>
-        function search() {
-            const query = document.getElementById('searchInput').value;
-            fetch('/search', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({query: query})
-            })
+ function search() {
+    const query = document.getElementById('searchInput').value;
+
+    fetch('/search', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query: query })
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log('Search results:', data);
+        // Display search results
+        const resultsDiv = document.getElementById('searchResults');
+        resultsDiv.innerHTML = data.map(result => `
+            <div class="result-item">
+                <h5>${result.source}</h5>
+                <p>${result.content}</p>
+                <span class="badge bg-info">Relevance: ${result.relevance}</span>
+            </div>
+        `).join('');
+
+        // Fetch and update retrieval analysis
+        fetch('/retrieval-analysis')
+            .then(response => response.json())
+            .then(metricsData => {
+                console.log('Retrieval metrics:', metricsData);
+                loadRetrievalAnalysis();
+            });
+    });
+}
+
+
+
+        function loadChunkingAnalysis() {
+        fetch('/chunks-analysis')
             .then(response => response.json())
             .then(data => {
-                const resultsDiv = document.getElementById('results');
-                resultsDiv.innerHTML = data.map(result => `
-                    <div class="result-card ${result.relevance.toLowerCase() === 'high' ? 'relevance-high' : 'relevance-medium'}">
-                        <h5>${result.source}</h5>
-                        <span class="badge ${result.relevance === 'High' ? 'bg-success' : 'bg-warning'}">${result.relevance}</span>
-                        <pre><code>${result.content}</code></pre>
+                document.getElementById('chunkStats').innerHTML = `
+                    <p>Total Chunks: ${data.total_chunks}</p>
+                    <p>Python Files: ${data.file_types.python}</p>
+                    <p>Documentation Files: ${data.file_types.docs}</p>
+                `;
+
+                const sampleHtml = data.sample_chunks.map(chunk => `
+                    <div class="chunk-sample">
+                        <strong>${chunk.source}</strong>
+                        <p>Size: ${chunk.size} chars | Type: ${chunk.type}</p>
                     </div>
                 `).join('');
+                document.getElementById('sampleChunks').innerHTML = sampleHtml;
             });
-        }
+    }
+
+    // Load chunking analysis when page loads
+    window.onload = loadChunkingAnalysis;
+  function loadRetrievalAnalysis() {
+    fetch('/retrieval-analysis')
+        .then(response => response.json())
+        .then(data => {
+            // Add console log to see what we're getting
+            console.log('Retrieval Analysis Data:', data);
+
+            const recentSearchesHtml = data.recent_searches.map(search => `
+                <div class="search-item mb-2">
+                    <strong>Query:</strong> ${search.query}<br>
+                    <strong>Results:</strong> ${search.total_results}<br>
+                    <strong>Average Score:</strong> ${search.avg_score.toFixed(3)}
+                </div>
+            `).join('');
+
+            document.getElementById('recentSearches').innerHTML = recentSearchesHtml || 'No recent searches';
+
+            document.getElementById('searchMetrics').innerHTML = `
+                <p><strong>Average Response Time:</strong> ${data.avg_response_time.toFixed(3)}s</p>
+                <h6>Top Matching Files:</h6>
+                <ul>
+                    ${data.top_matching_files.map(file =>
+                        `<li>${file.file} (${file.matches} matches)</li>`
+                    ).join('')}
+                </ul>
+            `;
+        });
+}
+document.addEventListener('DOMContentLoaded', function() {
+    loadRetrievalAnalysis();  // Initial load
+});
+
+// Also add periodic refresh
+setInterval(loadRetrievalAnalysis, 3000);  // Refresh every 3 seconds
+
+
     </script>
 </body>
 </html>

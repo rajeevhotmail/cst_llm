@@ -1,35 +1,33 @@
 from flask import Flask, render_template, request, jsonify
 from vector_store import create_vector_store
+from vector_store import load_chunk_stats
+from retrieval_metrics import calculate_relevance_metrics
+
 from document_processor import load_documents, process_documents
 import logging
 import time
 from config import setup_logging
 import os
+from retrieval_metrics import (
+    calculate_relevance_metrics,
+    recent_search_metrics,
+    search_times,
+    file_match_counts,
+    calculate_avg_response_time,
+    get_top_matching_files
+)
 
 app = Flask(__name__)
 setup_logging()  # This will create the timestamped log file
 start_total = time.time()
 
-
-
+# Load documents and create chunks first
+chunks = None
 vector_store = None
 
-def initialize_vector_store():
-    global vector_store
-    if vector_store is None:
-        start_total = time.time()
-        vector_store = create_vector_store(None, "source_code/fastapi")
-        logging.info(f"Total initialization time: {time.time() - start_total:.2f} seconds")
-    return vector_store
-
-# Initialize once at startup
-vector_store = initialize_vector_store()
-
-
 if os.path.exists("faiss_hf_index"):
-    t0 = time.time()
     vector_store = create_vector_store(None, "source_code/fastapi")
-    logging.info(f"Loaded existing vector store in: {time.time() - t0:.2f} seconds")
+    chunks_info = load_chunk_stats()
 else:
     t1 = time.time()
     docs = load_documents("source_code/fastapi")
@@ -49,18 +47,70 @@ logging.info(f"Total initialization time: {time.time() - start_total:.2f} second
 def home():
     return render_template('index.html')
 
+@app.route('/chunks-analysis')
+def show_chunking_stats():
+    if os.path.exists("faiss_hf_index"):
+        # Use cached stats
+        chunks_info = load_chunk_stats()
+    else:
+        # Generate stats from chunks
+        chunks_info = {
+            "total_chunks": len(chunks),
+            "file_types": {
+                "python": sum(1 for c in chunks if c.metadata['source'].endswith('.py')),
+                "docs": sum(1 for c in chunks if c.metadata['source'].endswith('.md'))
+            },
+            "sample_chunks": [
+                {
+                    "source": chunk.metadata['source'],
+                    "size": len(chunk.page_content),
+                    "type": "Python" if chunk.metadata['source'].endswith('.py') else "Documentation"
+                }
+                for chunk in chunks[:5]
+            ]
+        }
+    return jsonify(chunks_info)
 @app.route('/search', methods=['POST'])
 def search():
     query = request.json['query']
+    start_time = time.time()
+
+    logging.info(f"Processing search query: {query}")
+
     results = vector_store.similarity_search(query, k=3)
+    search_time = time.time() - start_time
+
+    logging.info(f"Found {len(results)} results in {search_time:.3f} seconds")
+
+    # Calculate and store metrics
+    search_metrics = calculate_relevance_metrics(query, results)
+    recent_search_metrics.append(search_metrics)
+    search_times.append(search_time)
+
+    logging.info(f"Metrics collected: {search_metrics}")
+
+    # Update file match counts
+    for doc in results:
+        file_match_counts[doc.metadata['source']] = file_match_counts.get(doc.metadata['source'], 0) + 1
 
     formatted_results = [{
         'source': doc.metadata['source'],
         'content': doc.page_content[:200],
-        'relevance': 'High' if doc.metadata['source'].endswith('.py') else 'Medium'
-    } for doc in results]
+        'relevance': 'High' if doc.metadata['source'].endswith('.py') else 'Medium',
+        'similarity_score': search_metrics['relevance_scores'][idx]['score']
+    } for idx, doc in enumerate(results)]
 
     return jsonify(formatted_results)
+
+@app.route('/retrieval-analysis')
+def show_retrieval_stats():
+    metrics_info = {
+        "recent_searches": list(recent_search_metrics)[-5:],  # Convert deque to list for slicing
+        "avg_response_time": calculate_avg_response_time(),
+        "top_matching_files": get_top_matching_files()
+    }
+    return jsonify(metrics_info)
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=False)
