@@ -11,6 +11,9 @@ MODELS_CACHE_DIR = "models_cache"
 FAISS_INDEX_PATH = "faiss_hf_index"
 FAISS_TIMESTAMP_FILE = "faiss_timestamp.txt"
 CHUNK_STATS_PATH = "faiss_hf_index/chunk_stats.json"
+CODE_INDEX_PATH = "faiss_hf_index/code"
+DOCS_INDEX_PATH = "faiss_hf_index/docs"
+
 
 def save_chunk_stats(chunks):
     # Filter for unique, non-test files
@@ -74,26 +77,53 @@ def save_index_timestamp():
     with open(FAISS_TIMESTAMP_FILE, 'w') as f:
         f.write(str(time.time()))
 
+def get_mixed_documents(vector_store, query, k=6):
+    """Retrieve a balanced mix of Python and Markdown files"""
+    # Get a larger initial set to ensure we have both types
+    initial_docs = vector_store.similarity_search(query, k=k*3)
+
+    logging.info(f"Initial retrieval: {len(initial_docs)} documents")
+    for doc in initial_docs:
+        logging.info(f"Retrieved: {doc.metadata['source']}")
+
+    # Separate by file type
+    py_docs = [doc for doc in initial_docs if doc.metadata['source'].endswith('.py')]
+    md_docs = [doc for doc in initial_docs if doc.metadata['source'].endswith('.md')]
+
+    logging.info(f"Found {len(py_docs)} Python files and {len(md_docs)} Markdown files")
+
+    # Take top k/2 from each type
+    half_k = k // 2
+    mixed_docs = py_docs[:half_k] + md_docs[:half_k]
+
+    return mixed_docs
+
 
 def get_relevant_documents(vector_store, query, k=4):
     """Retrieve only Python source files"""
+    logging.info(f"Initial search for query: '{query}' with k={k}")
+
     # Get a larger initial set
-    docs = vector_store.similarity_search(
-        query,
-        k=k*5  # Get more docs to ensure we have Python files
-    )
+    docs = vector_store.similarity_search(query, k=k*5)
+    logging.info(f"Retrieved {len(docs)} initial documents")
+
+    # Log initial results
+    for idx, doc in enumerate(docs):
+        logging.info(f"Initial result {idx+1}: {doc.metadata['source']} | Score: {doc.metadata.get('score', 'N/A')}")
 
     # Only keep Python files
     python_docs = [doc for doc in docs if doc.metadata['source'].endswith('.py')]
+    logging.info(f"Filtered to {len(python_docs)} Python files")
 
     # If we don't have enough Python files, get more documents
     while len(python_docs) < k and k*5 < 100:
         k *= 2
+        logging.info(f"Not enough Python files, expanding search to k={k*5}")
         docs = vector_store.similarity_search(query, k=k*5)
         python_docs = [doc for doc in docs if doc.metadata['source'].endswith('.py')]
+        logging.info(f"Found {len(python_docs)} Python files after expansion")
 
     return python_docs[:k]
-
 def test_embeddings_quality(vector_store):
     """Demonstrate embedding quality with targeted examples"""
     test_cases = [
@@ -138,6 +168,8 @@ def create_vector_store(chunks, source_dir):
         logging.info(f"Created and saved new index in {time.time() - start_time:.2f} seconds")
 
     return vector_store
+
+
 
 
 

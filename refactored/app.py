@@ -1,9 +1,7 @@
 from flask import Flask, render_template, request, jsonify
-from vector_store import create_vector_store
+from vector_store import create_vector_store, get_mixed_documents
 from vector_store import load_chunk_stats
-from retrieval_metrics import calculate_relevance_metrics
-
-from document_processor import load_documents, process_documents
+from document_processor import load_documents, process_documents, rerank_results
 import logging
 import time
 from config import setup_logging
@@ -75,22 +73,28 @@ def search():
     query = request.json['query']
     start_time = time.time()
 
-    logging.info(f"Processing search query: {query}")
+    logging.info(f"🔍 Processing search query: {query}")
 
-    results = vector_store.similarity_search(query, k=3)
+    # Use our new mixed document retrieval
+    initial_results = get_mixed_documents(vector_store, query, k=6)
+    logging.info(f"📑 Retrieved {len(initial_results)} mixed results")
+
+    # Apply reranking
+    reranked_results = rerank_results(initial_results, query)
+    logging.info(f"🏆 Reranked to {len(reranked_results)} final results")
+
     search_time = time.time() - start_time
-
-    logging.info(f"Found {len(results)} results in {search_time:.3f} seconds")
+    logging.info(f"⏱️ Total search time: {search_time:.3f} seconds")
 
     # Calculate and store metrics
-    search_metrics = calculate_relevance_metrics(query, results)
+    search_metrics = calculate_relevance_metrics(query, reranked_results)
     recent_search_metrics.append(search_metrics)
     search_times.append(search_time)
 
-    logging.info(f"Metrics collected: {search_metrics}")
+    logging.info(f"📊 Metrics collected: {search_metrics}")
 
     # Update file match counts
-    for doc in results:
+    for doc in reranked_results:
         file_match_counts[doc.metadata['source']] = file_match_counts.get(doc.metadata['source'], 0) + 1
 
     formatted_results = [{
@@ -98,7 +102,7 @@ def search():
         'content': doc.page_content[:200],
         'relevance': 'High' if doc.metadata['source'].endswith('.py') else 'Medium',
         'similarity_score': search_metrics['relevance_scores'][idx]['score']
-    } for idx, doc in enumerate(results)]
+    } for idx, doc in enumerate(reranked_results)]
 
     return jsonify(formatted_results)
 
